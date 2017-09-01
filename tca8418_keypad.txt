@@ -1,0 +1,100 @@
+This is an enhancement of the tca8418 module found in the 3.14 linux kernel.
+
+The tca8148 is primarily used for interfacing keypads, and the existing driver
+supported this well, but the device also can be used for gpio (often for 
+driving leds).
+
+This extended driver exposes the device as a gpio controller.  Care must be
+taken to not used pins used for keyscanning as gpio, i.e. look at the 
+keypad,num-rows and keypad,num-columns parameters and only use row or
+column pins higher than these.
+
+Required properties:
+- compatible: "ti,tca8418"
+- reg: the I2C address
+- interrupts: IRQ line number, should trigger on falling edge
+- keypad,num-rows: The number of rows
+- keypad,num-columns: The number of columns
+- linux,keymap: Keys definitions, see keypad-matrix.
+
+Optional properties:
+- gpio-controller: Allows the tca8418 to be used a gpio controller as well
+- #gpio-cells: Number of parameters in a gpio specification (usually 2, the
+		gpio number and active sense)
+
+The tca8418 device has 8 Rows, 10 Columns.  gpio is enumated by the rows first
+then the gpio number is found by: 
+	gpio_num = row		(for row pins, where row is 0:7)
+	gpio_num = 8 + column	(for column pins, where column is 0:9)
+
+
+Here is a device tree example, where there is a 5x5 matrix, with the remaining
+lines (Rows 5-7, Columns 5-9) being used as gpio controlling 8 LEDs.
+
+	i2c_keypad: tca8418@34 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_i2c_keypad>;
+		compatible = "tca8418_keypad";
+		reg = <0x34>;
+		interrupt-parent = <&gpio3>;
+		interrupts = <2 4>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		keypad,num-rows = <5>;
+		keypad,num-columns = <5>;
+		linux,keymap = <	/* row<<24 | column<<16 | key-code */
+			0x000002c0	/* BUTTON1  -> BTN_TRIGGER_HAPPY1 */
+			0x000102c1	/* BUTTON2  -> BTN_TRIGGER_HAPPY2 */
+			0x000202c2	/* BUTTON3  -> BTN_TRIGGER_HAPPY3 */
+			0x000302c3	/* BUTTON4  -> BTN_TRIGGER_HAPPY4 */
+			0x000402c4	/* BUTTON5  -> BTN_TRIGGER_HAPPY5 */
+			0x010002c5	/* BUTTON6  -> BTN_TRIGGER_HAPPY6 */
+			0x010102c6	/* BUTTON7  -> BTN_TRIGGER_HAPPY7 */
+			0x010202c7	/* BUTTON8  -> BTN_TRIGGER_HAPPY8 */
+			0x010302c8	/* BUTTON9  -> BTN_TRIGGER_HAPPY9 */
+			0x010402c9	/* BUTTON10 -> BTN_TRIGGER_HAPPY10 */
+			0x020002ca	/* BUTTON11 -> BTN_TRIGGER_HAPPY11 */
+			0x020102cb	/* BUTTON12 -> BTN_TRIGGER_HAPPY12 */
+			0x020202cc	/* BUTTON13 -> BTN_TRIGGER_HAPPY13 */
+			0x020302cd	/* BUTTON14 -> BTN_TRIGGER_HAPPY14 */
+			0x020402ce	/* BUTTON15 -> BTN_TRIGGER_HAPPY15 */
+			0x030002cf	/* BUTTON16 -> BTN_TRIGGER_HAPPY16 */
+			0x030102d0	/* BUTTON17 -> BTN_TRIGGER_HAPPY17 */
+			0x030202d1	/* BUTTON18 -> BTN_TRIGGER_HAPPY18 */
+			0x030302d2	/* BUTTON19 -> BTN_TRIGGER_HAPPY19 */
+			0x030402d3	/* BUTTON20 -> BTN_TRIGGER_HAPPY20 */
+			0x040002d4	/* BUTTON21 -> BTN_TRIGGER_HAPPY21 */
+			0x040102d5	/* BUTTON22 -> BTN_TRIGGER_HAPPY22 */
+			0x040202d6	/* BUTTON23 -> BTN_TRIGGER_HAPPY23 */
+			0x040302d7	/* BUTTON24 -> BTN_TRIGGER_HAPPY24 */
+			0x040402d8	/* BUTTON25 -> BTN_TRIGGER_HAPPY25 */
+		>;
+		status = "okay";
+
+		/* LEDS...
+			R5 (gpio5)  LED1
+			R6 (gpio6)  LED2
+			R7 (gpio7)  LED3
+			C5 (gpio13) LED4
+			C6 (gpio14) LED5
+			C7 (gpio15) LED6
+			C8 (gpio16) LED7
+			C9 (gpio17) LED8
+		*/
+	};
+
+	gpio-leds {
+		compatible = "gpio-leds";
+		
+		led1 {
+			label = "led1;
+			gpios = <&i2c_keypad 5 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+		led2 {
+			label = "led2";
+			gpios = <&i2c_keypad 6 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+		...
+	};
