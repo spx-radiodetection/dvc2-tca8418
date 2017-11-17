@@ -5,7 +5,7 @@ supported this well, but the device also can be used for gpio (often for
 driving leds).
 
 This extended driver exposes the device as a gpio controller.  Care must be
-taken to not used pins used for keyscanning as gpio, i.e. look at the 
+taken to not reuse pins used for keyscanning as gpio, i.e. look at the 
 keypad,num-rows and keypad,num-columns parameters and only use row or
 column pins higher than these.
 

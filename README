@@ -1,0 +1,17 @@
+adv7180 driver for iMX6
+=======================
+
+This is a enhancement of the tca8418 driver found in the Freescale/NXP 3.14 
+kernel.  
+
+The tca8148 is primarily used for interfacing keypads, and the existing driver
+supported this well, but the device also can be used for gpio (often for 
+driving leds).
+
+This extended driver exposes the device as a gpio controller.  Care must be
+taken to not reuse pins used for keyscanning as gpio, i.e. look at the 
+keypad,num-rows and keypad,num-columns parameters and only use row or
+column pins higher than these.
+
+See tca8418_keypad.txt for device tree bindings, and more information.
+
