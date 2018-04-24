@@ -113,6 +113,8 @@
 static int suppress_i2c;
 module_param(suppress_i2c, int, 0644);
 MODULE_PARM_DESC(suppress_i2c, " set to non-zero to suppress I2C traffic");
+	
+static struct workqueue_struct *wq;
 
 struct tca8418_keypad {
 	struct gpio_chip	gc;
@@ -125,6 +127,11 @@ struct tca8418_keypad {
 	struct mutex lock;	/* protect out and dir array */
 	u32 gpio_dir;		/* software latch of direction settings */
 	u32 gpio_out;		/* software latch of outputs */
+
+	u32 rows;
+	u32 cols;
+
+	struct delayed_work dwork;
 };
 
 /*
@@ -337,8 +344,7 @@ static irqreturn_t tca8418_irq_handler(int irq, void *dev_id)
 /*
  * Configure the TCA8418 for keypad operation
  */
-static int tca8418_configure(struct tca8418_keypad *keypad_data,
-			     u32 rows, u32 cols)
+static int tca8418_configure(struct tca8418_keypad *keypad_data)
 {
 	int reg, error;
 
@@ -350,8 +356,8 @@ static int tca8418_configure(struct tca8418_keypad *keypad_data,
 
 
 	/* Assemble a mask for row and column registers */
-	reg  =  ~(~0 << rows);
-	reg += (~(~0 << cols)) << 8;
+	reg  =  ~(~0 << keypad_data->rows);
+	reg += (~(~0 << keypad_data->cols)) << 8;
 
 	/* Set registers to keypad mode */
 	error |= tca8418_write_byte(keypad_data, REG_KP_GPIO1, reg);
@@ -378,6 +384,21 @@ static int tca8418_of_xlate(struct gpio_chip *gpiochip,
 		*flags = gpiospec->args[1];
 
 	return gpiospec->args[0];
+}
+
+static void tca8418_watchdog(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct tca8418_keypad *keypad_data = container_of(dwork,
+							  struct tca8418_keypad,
+							  dwork);
+	u8 cfg = 0;
+
+	if (tca8418_read_byte(keypad_data, REG_CFG, &cfg) < 0 || cfg == 0) {
+		dev_err(&keypad_data->client->dev, TCA8418_NAME " watchdog detected that the keypad has been reset.\n");
+		tca8418_configure(keypad_data);
+	}
+	queue_delayed_work(wq, dwork, HZ * 1UL);
 }
 
 static int tca8418_keypad_probe(struct i2c_client *client,
@@ -455,9 +476,11 @@ static int tca8418_keypad_probe(struct i2c_client *client,
 
 	keypad_data->client = client;
 	keypad_data->row_shift = row_shift;
+	keypad_data->rows = rows;
+	keypad_data->cols = cols;
 
 	/* Initialize the tca8418 device or fail if it isn't present */
-	error = tca8418_configure(keypad_data, rows, cols);
+	error = tca8418_configure(keypad_data);
 	if (error < 0) {
 		dev_err(dev, "Failed to configure tca8418 device\n");
 		return error;
@@ -544,6 +567,10 @@ static int tca8418_keypad_probe(struct i2c_client *client,
 		goto fail;
 	}
 
+	/* Start watchdog timer */
+	INIT_DELAYED_WORK(&keypad_data->dwork, tca8418_watchdog);
+	queue_delayed_work(wq, &keypad_data->dwork, HZ * 1UL);
+
 	return 0;
 
 fail:
@@ -599,6 +626,7 @@ static struct i2c_driver tca8418_keypad_driver = {
 
 static int __init tca8418_keypad_init(void)
 {
+	wq = create_singlethread_workqueue(TCA8418_NAME "_wq");
 	return i2c_add_driver(&tca8418_keypad_driver);
 }
 subsys_initcall(tca8418_keypad_init);
@@ -606,6 +634,8 @@ subsys_initcall(tca8418_keypad_init);
 static void __exit tca8418_keypad_exit(void)
 {
 	i2c_del_driver(&tca8418_keypad_driver);
+	flush_workqueue(wq);
+	destroy_workqueue(wq);
 }
 module_exit(tca8418_keypad_exit);
 
